@@ -349,7 +349,7 @@ class EcorrNoise(NoiseComponent):
         self.add_param(
             maskParameter(
                 name="ECORR",
-                units="us",
+                units=u.LogUnit(physical_unit=u.second),
                 aliases=["TNECORR"],
                 description="An error term that is correlated among all TOAs in an observing epoch.",
                 convert_tcb2tdb=False,
@@ -438,7 +438,6 @@ class EcorrNoise(NoiseComponent):
         """Full ECORR covariance matrix."""
         U, Jvec = self.ecorr_basis_weight_pair(toas)
         return np.dot(U * Jvec[None, :], U.T)
-
 
 class PLDMNoise(NoiseComponent):
     """Model of DM variations as radio frequency-dependent noise with a
@@ -615,6 +614,15 @@ class PLChromNoise(NoiseComponent):
         )
         self.add_param(
             floatParameter(
+                name="TNCHROMIDX",
+                units="",
+                aliases=[],
+                description="Chromatic index of the chromatic noise.",
+                convert_tcb2tdb=False,
+            )
+        )
+        self.add_param(
+            floatParameter(
                 name="TNCHROMC",
                 units="",
                 aliases=[],
@@ -640,7 +648,7 @@ class PLChromNoise(NoiseComponent):
         t = (tbl["tdbld"].quantity * u.day).to(u.s).value
         freqs = self._parent.barycentric_radio_freq(toas).to(u.MHz)
         fref = 1400 * u.MHz
-        alpha = self._parent.TNCHROMIDX.value
+        alpha = self.TNCHROMIDX.value
         D = (fref.value / freqs.value) ** alpha
         nf = self.get_pl_vals()[2]
         Fmat = create_fourier_design_matrix(t, nf)
@@ -804,6 +812,469 @@ class PLRedNoise(NoiseComponent):
     def pl_rn_cov_matrix(self, toas):
         Fmat, phi = self.pl_rn_basis_weight_pair(toas)
         return np.dot(Fmat * phi[None, :], Fmat.T)
+
+
+class PLGWNoise(NoiseComponent):
+    """Timing noise with a power-law spectrum.
+
+    Over the long term, pulsars are observed to experience timing noise
+    dominated by low frequencies. This can occur, for example, if the
+    torque on the pulsar varies randomly. If the torque experiences
+    white noise, the phase we observe will experience "red" noise, that
+    is noise dominated by the lowest frequency. This results in errors
+    that are correlated between TOAs over fairly long time spans.
+
+    Parameters supported:
+
+    .. paramtable::
+        :class: pint.models.noise_model.PLRedNoise
+
+    Note
+    ----
+    Ref: NANOGrav 11 yrs data
+
+    """
+
+    register = True
+    category = "pl_gw_noise"
+
+    introduces_correlated_errors = True
+
+    def __init__(
+        self,
+    ):
+        super().__init__()
+
+        self.add_param(
+            floatParameter(
+                name="GWAMP",
+                units="",
+                aliases=[],
+                description="Amplitude of powerlaw " "red noise.",
+            )
+        )
+        self.add_param(
+            floatParameter(
+                name="GWIDX",
+                units="",
+                aliases=[],
+                description="Spectral index of " "powerlaw red noise.",
+            )
+        )
+
+        self.add_param(
+            floatParameter(
+                name="TNGWAMP",
+                units="",
+                aliases=[],
+                description="Amplitude of powerlaw " "red noise in tempo2 format",
+            )
+        )
+        self.add_param(
+            floatParameter(
+                name="TNGWGAM",
+                units="",
+                aliases=[],
+                description="Spectral index of powerlaw " "red noise in tempo2 format",
+            )
+        )
+        self.add_param(
+            floatParameter(
+                name="TNGWC",
+                units="",
+                aliases=[],
+                description="Number of red noise frequencies.",
+            )
+        )
+
+        self.covariance_matrix_funcs += [self.pl_gw_cov_matrix]
+        self.basis_funcs += [self.pl_gw_basis_weight_pair]
+
+    def get_pl_vals(self):
+        nf = int(self.TNGWC.value) if self.TNGWC.value is not None else 30
+        if self.TNGWAMP.value is not None and self.TNGWGAM.value is not None:
+            amp, gam = 10**self.TNGWAMP.value, self.TNGWGAM.value
+        elif self.GWAMP.value is not None and self.GWIDX is not None:
+            fac = (86400.0 * 365.24 * 1e6) / (2.0 * np.pi * np.sqrt(3.0))
+            amp, gam = self.GWAMP.value / fac, -1 * self.GWIDX.value
+        return (amp, gam, nf)
+
+    def get_noise_basis(self, toas):
+        """Return a Fourier design matrix for red noise.
+
+        See the documentation for pl_rn_basis_weight_pair function for details."""
+
+        tbl = toas.table
+        t = (tbl["tdbld"].quantity * u.day).to(u.s).value
+        nf = self.get_pl_vals()[2]
+        return create_fourier_design_matrix(t, nf)
+
+    def get_noise_weights(self, toas):
+        """Return power law red noise weights.
+
+        See the documentation for pl_rn_basis_weight_pair for details."""
+
+        tbl = toas.table
+        t = (tbl["tdbld"].quantity * u.day).to(u.s).value
+        amp, gam, nf = self.get_pl_vals()
+        Ffreqs = get_rednoise_freqs(t, nf)
+        return powerlaw(Ffreqs, amp, gam) * Ffreqs[0]
+
+    def pl_gw_basis_weight_pair(self, toas):
+        """Return a Fourier design matrix and power law red noise weights.
+
+        A Fourier design matrix contains the sine and cosine basis_functions
+        in a Fourier series expansion.
+        The weights used are the power-law PSD values at frequencies n/T,
+        where n is in [1, TNREDC] and T is the total observing duration of
+        the dataset.
+
+        """
+        return (self.get_noise_basis(toas), self.get_noise_weights(toas))
+
+    def pl_gw_cov_matrix(self, toas):
+        Fmat, phi = self.pl_gw_basis_weight_pair(toas)
+        return np.dot(Fmat * phi[None, :], Fmat.T)
+
+
+class SWNoise(NoiseComponent):
+    """Model of DM variations as radio frequency-dependent noise with a
+    power-law spectrum.
+
+    Variations in DM over time result from both the proper motion of the
+    pulsar and the changing electron number density along the line of sight
+    from the solar wind and ISM. In particular, Kolmogorov turbulence in the
+    ionized ISM will induce stochastic DM variations with a power law
+    spectrum. Timing errors due to unmodelled DM variations can therefore
+    appear very similar to intrinsic red noise, however the amplitude of these
+    variations will scale with the inverse of the square of the (Earth Doppler
+    corrected) radio frequency.
+
+    Parameters supported:
+
+    .. paramtable::
+        :class: pint.models.noise_model.PLDMNoise
+
+    Note
+    ----
+    Ref: Lentati et al. 2014
+
+    """
+
+    register = True
+    category = "SW_noise"
+
+    introduces_correlated_errors = True
+
+    def __init__(
+        self,
+    ):
+        super().__init__()
+
+        self.add_param(
+            floatParameter(
+                name="SWAMP",
+                units="",
+                aliases=[],
+                description="Amplitude of powerlaw " "SW noise in tempo2 format",
+            )
+        )
+        self.add_param(
+            floatParameter(
+                name="SWGAM",
+                units="",
+                aliases=[],
+                description="Spectral index of powerlaw " "SW noise in tempo2 format",
+            )
+        )
+        self.add_param(
+            floatParameter(
+                name="SWC",
+                units="",
+                aliases=[],
+                description="Number of SW noise frequencies.",
+            )
+        )
+        self.add_param(
+            floatParameter(
+                name="SWNEARTH",
+                units="",
+                aliases=[],
+                description="Used to determine the mean SW impact for the GP to perturbate around.",
+            )
+        )
+
+
+
+        self.covariance_matrix_funcs += [self.pl_sw_cov_matrix]
+        self.basis_funcs += [self.pl_sw_basis_weight_pair]
+
+    def get_pl_vals(self):
+        nf = int(self.SWC.value) if self.SWC.value is not None else 30
+        amp, gam = 10**self.SWAMP.value, self.SWGAM.value
+        return (amp, gam, nf)
+    
+    def _get_ssb_lsec(self, toas, obs_planet):
+        """Get the planet to SSB vector in lightseconds from Pint table"""
+        if obs_planet not in toas.table.colnames:
+            err_msg = f"{obs_planet} is not in toas.table.colnames. Either "
+            err_msg += "`planet` flag is not True  in `toas` or further Pint "
+            err_msg += "development to add additional planets is needed."
+            raise ValueError(err_msg)
+        vec = toas.table[obs_planet] + toas.table["ssb_obs_pos"]
+        return (vec / const.c).to("s").value
+
+    def _get_planetssb(self, toas):
+        planetssb = None
+        """
+        Currently Pint only has position vectors for:
+        [Earth, Jupiter, Saturn, Uranus, Neptune]
+        No velocity vectors available
+        [Mercury, Venus, Mars, Pluto] unavailable pending Pint enhancements.
+        """
+        #if self.planets:
+        planetssb = np.empty((len(toas), 9, 6))
+        planetssb[:] = np.nan
+        planetssb[:, 2, :3] = self._get_ssb_lsec(toas, "obs_earth_pos")
+        planetssb[:, 4, :3] = self._get_ssb_lsec(toas, "obs_jupiter_pos")
+        planetssb[:, 5, :3] = self._get_ssb_lsec(toas, "obs_saturn_pos")
+        planetssb[:, 6, :3] = self._get_ssb_lsec(toas, "obs_uranus_pos")
+        planetssb[:, 7, :3] = self._get_ssb_lsec(toas, "obs_neptune_pos")
+
+            # if hasattr(model, "ELAT") and hasattr(model, "ELONG"):
+            #     for ii in range(9):
+            #         planetssb[:, ii, :3] = utils.ecl2eq_vec(planetssb[:, ii, :3])
+            #         # planetssb[:, ii, 3:] = utils.ecl2eq_vec(planetssb[:, ii, 3:])
+        return planetssb
+
+    def get_noise_basis(self, toas):
+        """Return a Fourier design matrix for DM noise.
+
+        See the documentation for pl_dm_basis_weight_pair function for details."""
+
+        '''        
+        tbl = toas.table
+        t = (tbl["tdbld"].quantity * u.day).to(u.s).value
+        freqs = self._parent.barycentric_radio_freq(toas).to(u.MHz)
+        fref = 1400 * u.MHz
+        D = (fref.value / freqs.value) ** 2
+        max_cadence = 60
+        Tspan = t.max() - t.min()
+        sw_components = int(Tspan / (max_cadence*86400))
+
+        #nf = self.get_pl_vals()[2]
+        #Ffreqs = get_rednoise_freqs(t, nf)
+        Fmat, F_freqs = createfourierdesignmatrix_solar_dm(t, freqs, nmodes = sw_components)
+        '''
+        tbl = toas.table
+        t = (tbl["tdbld"].quantity * u.day).to(u.s).value
+        freqs = self._parent.barycentric_radio_freq(toas).to(u.MHz)
+        fref = 1400 * u.MHz
+
+        #parfile = self.
+        timfile = toas.filename
+        which_astrometry = (
+            "AstrometryEquatorial" if "AstrometryEquatorial" in self._parent.components else "AstrometryEcliptic"
+        )
+        pos_t = self._parent.components[which_astrometry].ssb_to_psb_xyz_ICRS(self._parent.get_barycentric_toas(toas)).value
+        planetssb = self._get_planetssb(toas)
+        sunssb = self._get_sunssb(toas)
+
+        theta, R_earth, _, _ = theta_impact(planetssb, sunssb, pos_t)
+        dm_sol_wind = dm_solar(1.0, theta, R_earth)
+
+        dt_DM = dm_sol_wind * 4.148808e3 /(freqs.value**2)
+        nf = self.get_pl_vals()[2]
+        Fmat = create_fourier_design_matrix(t, nf)
+        return Fmat * dt_DM[:, None]
+
+
+        #return Fmat
+
+
+
+    def theta_impact(planetssb, sunssb, pos_t):
+        """
+        Use the attributes of an enterprise Pulsar object to calculate the
+        solar impact angle.
+
+        ::param :planetssb Solar system barycenter time series supplied with
+            enterprise.Pulsar objects.
+        ::param :sunssb Solar system sun-to-barycenter timeseries supplied with
+            enterprise.Pulsar objects.
+        ::param :pos_t Unit vector to pulsar position over time in ecliptic
+            coordinates. Supplied with enterprise.Pulsar objects.
+
+        returns: Solar impact angle (rad), Distance to Earth (R_earth),
+                impact distance (b), perpendicular distance (z_earth)
+        """
+        earth = planetssb[:, 2, :3]
+        sun = sunssb[:, :3]
+        earthsun = earth - sun
+        R_earth = np.sqrt(np.einsum('ij,ij->i', earthsun, earthsun))
+        Re_cos_theta_impact = np.einsum('ij,ij->i', earthsun, pos_t)
+
+        theta_impact = np.arccos(-Re_cos_theta_impact / R_earth)
+        b = np.sqrt(R_earth**2 - Re_cos_theta_impact**2)
+
+        return theta_impact, R_earth, b, -Re_cos_theta_impact
+    
+    def _get_sunssb(self, toas):
+        sunssb = None
+        #if self.planets:
+        _toas = np.array(self._parent.get_barycentric_toas(toas).value, dtype="float64") * 86400
+        sunssb = np.zeros((len(_toas), 6))
+        sunssb[:, :3] = self._get_ssb_lsec(toas, "obs_sun_pos")
+
+            # if hasattr(model, "ELAT") and hasattr(model, "ELONG"):
+            #     sunssb[:, :3] = utils.ecl2eq_vec(sunssb[:, :3])
+            # #     sunssb[:, 3:] = utils.ecl2eq_vec(sunssb[:, 3:])
+        return sunssb
+
+    def get_noise_weights(self, toas):
+        """Return power law DM noise weights.
+
+        See the documentation for pl_dm_basis_weight_pair for details."""
+
+        tbl = toas.table
+        t = (tbl["tdbld"].quantity * u.day).to(u.s).value
+        amp, gam, nf = self.get_pl_vals()
+        Ffreqs = get_rednoise_freqs(t, nf)
+        weights = powerlaw(Ffreqs, amp, gam) * Ffreqs[0]
+        return weights
+
+    def pl_sw_basis_weight_pair(self, toas):
+        """Return a Fourier design matrix and power law DM noise weights.
+
+        A Fourier design matrix contains the sine and cosine basis_functions
+        in a Fourier series expansion. Here we scale the design matrix by
+        (fref/f)**2, where fref = 1400 MHz to match the convention used in
+        enterprise.
+
+        The weights used are the power-law PSD values at frequencies n/T,
+        where n is in [1, TNDMC] and T is the total observing duration of
+        the dataset.
+
+        """
+        return (self.get_noise_basis(toas), self.get_noise_weights(toas))
+
+    def pl_sw_cov_matrix(self, toas):
+        Fmat, phi = self.pl_sw_basis_weight_pair(toas)
+        return np.dot(Fmat * phi[None, :], Fmat.T)
+
+
+class ChromAnnual(NoiseComponent):
+    """
+    Dummy noise class to extract the values of the deterministic signal for PINT realisations
+
+    """
+
+    register = True
+    category = "chrom_annual"
+
+    introduces_correlated_errors = True
+
+    def __init__(
+        self,
+    ):
+        super().__init__()
+
+        self.add_param(
+            floatParameter(
+                name="CHROMANNUALAMP",
+                units="",
+                aliases=[],
+                description="Amplitude of powerlaw " "Chromatic noise in tempo2 format",
+            )
+        )
+        self.add_param(
+            floatParameter(
+                name="CHROMANNUALPHASE",
+                units="",
+                aliases=[],
+                description="Spectral index of powerlaw " "Chromatic noise in tempo2 format",
+            )
+        )
+        self.add_param(
+            floatParameter(
+                name="CHROMANNUALIDX",
+                units="",
+                aliases=[],
+                description="Chromatic index of the chromatic noise.",
+            )
+        )
+
+
+    def get_pl_vals(self):
+        idx = int(self.CHROMANNUALIDX.value) if self.CHROMANNUALIDX.value is not None else 4
+        amp, phase = 10**self.CHROMANNUALAMP.value, self.CHROMANNUALPHASE.value
+        return (amp, phase, idx)
+    
+
+class ChromBump(NoiseComponent):
+    """
+    Dummy noise class to extract the values of the deterministic signal for PINT realisations
+
+    """
+
+    register = True
+    category = "chrom_bump"
+
+    introduces_correlated_errors = True
+
+    def __init__(
+        self,
+    ):
+        super().__init__()
+
+        self.add_param(
+            floatParameter(
+                name="CHROMBUMPAMP",
+                units="",
+                aliases=[],
+                description="Amplitude of gaussian event",
+            )
+        )
+        self.add_param(
+            floatParameter(
+                name="CHROMBUMPSIGN",
+                units="",
+                aliases=[],
+                description="Sign of gaussian event",
+            )
+        )
+        self.add_param(
+            floatParameter(
+                name="CHROMBUMPT",
+                units="",
+                aliases=[],
+                description="T0 starting time of event",
+            )
+        )
+
+        self.add_param(
+            floatParameter(
+                name="CHROMBUMPSIGMA",
+                units="",
+                aliases=[],
+                description="Sigma time of event",
+            )
+        )
+
+        self.add_param(
+            floatParameter(
+                name="CHROMBUMPIDX",
+                units="",
+                aliases=[],
+                description="Chromatic index of the chromatic noise.",
+            )
+        )
+
+
+    def get_pl_vals(self):
+        idx = int(self.CHROMBUMPIDX.value) if self.CHROMBUMPIDX.value is not None else 4
+        amp, sign, t0, sigma = 10**self.CHROMBUMPAMP.value, self.CHROMBUMPSIGN.value, self.CHROMBUMPT.value, self.CHROMBUMPSIGMA.value, self.CHROMBUMPIDX.value
+        return (amp, sign, t0, sigma, idx)
 
 
 def get_ecorr_epochs(toas_table, dt=1, nmin=2):
