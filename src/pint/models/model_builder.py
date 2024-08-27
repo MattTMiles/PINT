@@ -676,6 +676,7 @@ def get_model_and_toas(
     -------
     A tuple with (model instance, TOAs instance)
     """
+    
     mm = get_model(parfile, allow_name_mixing, allow_tcb=allow_tcb)
     tt = get_TOAs(
         timfile,

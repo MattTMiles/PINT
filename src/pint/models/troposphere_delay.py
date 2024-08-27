@@ -7,6 +7,7 @@ from astropy.coordinates import AltAz, SkyCoord
 from loguru import logger as log
 
 from pint.models.parameter import boolParameter
+from pint.models.parameter import floatParameter
 from pint.models.timing_model import DelayComponent
 from pint.observatory import get_observatory
 from pint.observatory.topo_obs import TopoObs
@@ -366,3 +367,8 @@ class TroposphereDelay(DelayComponent):
         return np.mod(
             2000.0 + (tdbld - 51544.5 + self.DOY_OFFSET) / (365.25) + seasonOffset, 1.0
         )
+
+
+
+
+

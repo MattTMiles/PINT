@@ -785,3 +785,6 @@ class DispersionJump(Dispersion):
         """
         dmjump = getattr(self, param_name)
         return np.zeros(toas.ntoas) * (u.s / dmjump.units)
+
+
+
