@@ -524,7 +524,7 @@ class PLDMNoise(CorrelatedNoiseComponent):
             floatParameter(
                 name="TNDMAMP",
                 units="",
-                aliases=[],
+                aliases=['TNDMAmp'],
                 description="Amplitude of powerlaw DM noise in tempo2 format",
                 convert_tcb2tdb=True,
                 tcb2tdb_scale_factor=1,
@@ -534,7 +534,7 @@ class PLDMNoise(CorrelatedNoiseComponent):
             floatParameter(
                 name="TNDMGAM",
                 units="",
-                aliases=[],
+                aliases=['TNDMGam'],
                 description="Spectral index of powerlaw DM noise in tempo2 format",
                 convert_tcb2tdb=True,
                 tcb2tdb_scale_factor=1,
@@ -696,7 +696,7 @@ class PLSWNoise(CorrelatedNoiseComponent):
             floatParameter(
                 name="TNSWAMP",
                 units="",
-                aliases=[],
+                aliases=["SWAMP"],
                 description="Amplitude of power-law SW DM noise in tempo2 format",
                 convert_tcb2tdb=True,
                 tcb2tdb_scale_factor=1,
@@ -706,7 +706,7 @@ class PLSWNoise(CorrelatedNoiseComponent):
             floatParameter(
                 name="TNSWGAM",
                 units="",
-                aliases=[],
+                aliases=["SWGAM"],
                 description="Spectral index of power-law "
                 "SW DM noise in tempo2 format",
                 convert_tcb2tdb=True,
@@ -717,7 +717,7 @@ class PLSWNoise(CorrelatedNoiseComponent):
             floatParameter(
                 name="TNSWC",
                 units="",
-                aliases=[],
+                aliases=["SWC"],
                 description="Number of SW DM noise frequencies.",
                 convert_tcb2tdb=False,
             )
@@ -890,6 +890,14 @@ class PLChromNoise(CorrelatedNoiseComponent):
         )
         self.add_param(
             intParameter(
+                name="TNCHROMIDX",
+                units="",
+                aliases=[],
+                description="Number of chromatic noise frequencies.",
+            )
+        )
+        self.add_param(
+            intParameter(
                 name="TNCHROMFLOG",
                 units="",
                 description="Number of logarithmically spaced chromatic noise frequencies in the basis.",
@@ -965,7 +973,7 @@ class PLChromNoise(CorrelatedNoiseComponent):
         Fmat = create_fourier_design_matrix(t, f)
         freqs = self._parent.barycentric_radio_freq(toas).to(u.MHz)
         fref = 1400 * u.MHz
-        alpha = self._parent.TNCHROMIDX.value
+        alpha = self.TNCHROMIDX.value
         D = (fref.value / freqs.value) ** alpha
 
         return Fmat * D[:, None]
@@ -1000,6 +1008,310 @@ class PLChromNoise(CorrelatedNoiseComponent):
         Fmat, phi = self.pl_chrom_basis_weight_pair(toas)
         return np.dot(Fmat * phi[None, :], Fmat.T)
 
+
+
+class ChromAnnual(NoiseComponent):
+    """
+    Dummy noise class to extract the values of the chromatic annual deterministic signal for PINT realisations
+
+    """
+
+    register = True
+    category = "chrom_annual"
+
+    introduces_correlated_errors = True
+
+    def __init__(
+        self,
+    ):
+        super().__init__()
+
+        self.add_param(
+            floatParameter(
+                name="CHROMANNUALAMP",
+                units="",
+                aliases=[],
+                description="Amplitude of the annual deterministic signal.",
+            )
+        )
+        self.add_param(
+            floatParameter(
+                name="CHROMANNUALPHASE",
+                units="",
+                aliases=[],
+                description="Phase of the annual deterministic signal",
+            )
+        )
+        self.add_param(
+            floatParameter(
+                name="CHROMANNUALIDX",
+                units="",
+                aliases=[],
+                description="Chromatic index of the annual deterministic signal.",
+            )
+        )
+
+
+    def get_pl_vals(self):
+        idx = int(self.CHROMANNUALIDX.value) if self.CHROMANNUALIDX.value is not None else 4
+        amp, phase = 10**self.CHROMANNUALAMP.value, self.CHROMANNUALPHASE.value
+        return (amp, phase, idx)
+    
+
+class ChromBump(NoiseComponent):
+    """
+    Dummy noise class to extract the values of the chromatic Gaussian deterministic signal for PINT realisations
+
+    """
+
+    register = True
+    category = "chrom_bump"
+
+    introduces_correlated_errors = True
+
+    def __init__(
+        self,
+    ):
+        super().__init__()
+
+        self.add_param(
+            floatParameter(
+                name="CHROMBUMPAMP",
+                units="",
+                aliases=[],
+                description="Amplitude of gaussian event",
+            )
+        )
+        self.add_param(
+            floatParameter(
+                name="CHROMBUMPSIGN",
+                units="",
+                aliases=[],
+                description="Sign of gaussian event",
+            )
+        )
+        self.add_param(
+            floatParameter(
+                name="CHROMBUMPT",
+                units="",
+                aliases=[],
+                description="T0 starting time of event",
+            )
+        )
+
+        self.add_param(
+            floatParameter(
+                name="CHROMBUMPSIGMA",
+                units="",
+                aliases=[],
+                description="Sigma time of event",
+            )
+        )
+
+        self.add_param(
+            floatParameter(
+                name="CHROMBUMPIDX",
+                units="",
+                aliases=[],
+                description="Chromatic index of the chromatic noise.",
+            )
+        )
+
+
+    def get_pl_vals(self):
+        idx = int(self.CHROMBUMPIDX.value) if self.CHROMBUMPIDX.value is not None else 4
+        amp, sign, t0, sigma = 10**self.CHROMBUMPAMP.value, self.CHROMBUMPSIGN.value, self.CHROMBUMPT.value, self.CHROMBUMPSIGMA.value, self.CHROMBUMPIDX.value
+        return (amp, sign, t0, sigma, idx)
+
+
+class PLGWNoise(NoiseComponent):
+    """Timing noise with a power-law spectrum.
+
+    Over the long term, pulsars are observed to experience timing noise
+    dominated by low frequencies. This can occur, for example, if the
+    torque on the pulsar varies randomly. If the torque experiences
+    white noise, the phase we observe will experience "red" noise, that
+    is noise dominated by the lowest frequency. This results in errors
+    that are correlated between TOAs over fairly long time spans.
+
+    Parameters supported:
+
+    .. paramtable::
+        :class: pint.models.noise_model.PLRedNoise
+
+    Note
+    ----
+    Ref: NANOGrav 11 yrs data
+
+    """
+
+    register = True
+    category = "pl_gw_noise"
+
+    is_time_correlated = True
+
+    def __init__(
+        self,
+    ):
+        super().__init__()
+
+        self.add_param(
+            floatParameter(
+                name="GWAMP",
+                units="",
+                aliases=[],
+                description="Amplitude of powerlaw " "red noise.",
+            )
+        )
+        self.add_param(
+            floatParameter(
+                name="GWIDX",
+                units="",
+                aliases=[],
+                description="Spectral index of " "powerlaw red noise.",
+            )
+        )
+
+        self.add_param(
+            floatParameter(
+                name="TNGWAMP",
+                units="",
+                aliases=[],
+                description="Amplitude of powerlaw " "red noise in tempo2 format",
+            )
+        )
+        self.add_param(
+            floatParameter(
+                name="TNGWGAM",
+                units="",
+                aliases=[],
+                description="Spectral index of powerlaw " "red noise in tempo2 format",
+            )
+        )
+        self.add_param(
+            floatParameter(
+                name="TNGWC",
+                units="",
+                aliases=[],
+                description="Number of red noise frequencies.",
+            )
+        )
+        self.add_param(
+            intParameter(
+                name="TNGWFLOG",
+                units="",
+                description="Number of logarithmically spaced red noise frequencies in the basis.",
+            )
+        )
+        self.add_param(
+            floatParameter(
+                name="TNGWFLOG_FACTOR",
+                units="",
+                description="Scaling factor for the log-spaced frequencies (2 -> [1/8,1/4,1/2,...])",
+                convert_tcb2tdb=True,
+                tcb2tdb_scale_factor=1,
+            )
+        )
+        self.add_param(
+            floatParameter(
+                name="TNGWTSPAN",
+                units="year",
+                description="Time span corresponding to the fundamental frequency of the achromatic red noise Fourier series (data span is used by default).",
+                convert_tcb2tdb=True,
+                tcb2tdb_scale_factor=1,
+            )
+        )
+        self.covariance_matrix_funcs += [self.pl_gw_cov_matrix]
+        self.basis_funcs += [self.pl_gw_basis_weight_pair]
+
+    def get_pl_vals(self):
+        nf = int(self.TNGWC.value) if self.TNGWC.value is not None else 30
+        if self.TNGWAMP.value is not None and self.TNGWGAM.value is not None:
+            amp, gam = 10**self.TNGWAMP.value, self.TNGWGAM.value
+        elif self.GWAMP.value is not None and self.GWIDX is not None:
+            fac = (86400.0 * 365.24 * 1e6) / (2.0 * np.pi * np.sqrt(3.0))
+            amp, gam = self.GWAMP.value / fac, -1 * self.GWIDX.value
+        return (amp, gam, nf)
+
+    def get_plc_vals(self) -> Tuple[float, float, int, int, float]:
+        """
+        Retrieve power-law parameters and frequency-basis parameters
+        from the model, substituting defaults if unspecified.
+        """
+        n_lin = int(self.TNGWC.value) if self.TNGWC.value is not None else 30
+        n_log = (
+            int(self.TNGWFLOG.value) if (self.TNGWFLOG.value is not None) else None
+        )
+        gw_log_factor = (
+            self.TNGWFLOG_FACTOR.value
+            if (self.TNGWFLOG_FACTOR.value is not None)
+            else 2
+        )
+
+        if self.TNGWFAMP.value is not None and self.TNGWFGAM.value is not None:
+            amp, gam = 10**self.TNGWFAMP.value, self.TNGWFGAM.value
+        elif self.GWAMP.value is not None and self.GWIDX is not None:
+            fac = (86400.0 * 365.24 * 1e6) / (2.0 * np.pi * np.sqrt(3.0))
+            amp, gam = self.GWAMP.value / fac, -1 * self.GWIDX.value
+
+        f_min_ratio = 1 / (gw_log_factor**n_log) if n_log is not None else 1
+
+        return amp, gam, n_lin, n_log, f_min_ratio
+
+    def get_time_frequencies(self, toas: TOAs) -> np.ndarray:
+        """Return the frequencies of the noise model"""
+
+        tbl = toas.table
+        t = (tbl["tdbld"].quantity * u.day).to(u.s).value
+        T = (
+            np.max(t) - np.min(t)
+            if self.TNGWTSPAN.quantity is None
+            else self.TNGWTSPAN.quantity
+        )
+
+        (_, _, n_lin, n_log, f_min_ratio) = self.get_plc_vals()
+        f_min = f_min_ratio / T
+
+        return t, get_rednoise_freqs(
+            t, n_lin, Tspan=T, logmode=0, f_min=f_min, nlog=n_log
+        )
+    
+    def get_noise_basis(self, toas: TOAs) -> np.ndarray:
+        """Return a Fourier design matrix for red noise.
+
+        See the documentation for pl_rn_basis_weight_pair function for details."""
+
+        t, f = self.get_time_frequencies(toas)
+        Fmat = create_fourier_design_matrix(t, f)
+
+        return Fmat
+
+    def get_noise_weights(self, toas: TOAs) -> np.ndarray:
+        """Return power law red noise weights.
+
+        See the documentation for pl_rn_basis_weight_pair for details."""
+
+        (amp, gam, _, _, _) = self.get_plc_vals()
+        _, f = self.get_time_frequencies(toas)
+        df = np.diff(np.concatenate([[0], f]))
+
+        return powerlaw(f.repeat(2), amp, gam) * df.repeat(2)
+
+    def pl_gw_basis_weight_pair(self, toas: TOAs) -> Tuple[np.ndarray, np.ndarray]:
+        """Return a Fourier design matrix and power law red noise weights.
+
+        A Fourier design matrix contains the sine and cosine basis_functions
+        in a Fourier series expansion.
+        The weights used are the power-law PSD values at frequencies n/T,
+        where n is in [1, TNREDC] and T is the total observing duration of
+        the dataset.
+
+        """
+        return (self.get_noise_basis(toas), self.get_noise_weights(toas))
+
+    def pl_gw_cov_matrix(self, toas: TOAs) -> np.ndarray:
+        Fmat, phi = self.pl_gw_basis_weight_pair(toas)
+        return np.dot(Fmat * phi[None, :], Fmat.T)
 
 class PLRedNoise(CorrelatedNoiseComponent):
     """Timing noise with a power-law spectrum.
