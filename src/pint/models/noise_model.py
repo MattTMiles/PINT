@@ -739,6 +739,17 @@ class PLSWNoise(CorrelatedNoiseComponent):
             )
         )
 
+        self.add_param(
+            floatParameter(
+                name="SWNEARTH",
+                units="",
+                aliases=[],
+                convert_tcb2tdb=False,
+                tcb2tdb_scale_factor=1,
+                description="Used to determine the mean SW impact for the GP to perturbate around. Need this for appropriate timing model fit.",
+            )
+        )
+
         self.covariance_matrix_funcs += [self.pl_sw_cov_matrix]
         self.basis_funcs += [self.pl_sw_basis_weight_pair]
 
@@ -1031,6 +1042,8 @@ class ChromAnnual(NoiseComponent):
                 name="CHROMANNUALAMP",
                 units="",
                 aliases=[],
+                convert_tcb2tdb=True,
+                tcb2tdb_scale_factor=1,
                 description="Amplitude of the annual deterministic signal.",
             )
         )
@@ -1039,6 +1052,8 @@ class ChromAnnual(NoiseComponent):
                 name="CHROMANNUALPHASE",
                 units="",
                 aliases=[],
+                convert_tcb2tdb=True,
+                tcb2tdb_scale_factor=1,
                 description="Phase of the annual deterministic signal",
             )
         )
@@ -1047,6 +1062,8 @@ class ChromAnnual(NoiseComponent):
                 name="CHROMANNUALIDX",
                 units="",
                 aliases=[],
+                convert_tcb2tdb=True,
+                tcb2tdb_scale_factor=1,
                 description="Chromatic index of the annual deterministic signal.",
             )
         )
@@ -1079,6 +1096,8 @@ class ChromBump(NoiseComponent):
                 name="CHROMBUMPAMP",
                 units="",
                 aliases=[],
+                convert_tcb2tdb=True,
+                tcb2tdb_scale_factor=1,
                 description="Amplitude of gaussian event",
             )
         )
@@ -1087,6 +1106,8 @@ class ChromBump(NoiseComponent):
                 name="CHROMBUMPSIGN",
                 units="",
                 aliases=[],
+                convert_tcb2tdb=True,
+                tcb2tdb_scale_factor=1,
                 description="Sign of gaussian event",
             )
         )
@@ -1095,6 +1116,8 @@ class ChromBump(NoiseComponent):
                 name="CHROMBUMPT",
                 units="",
                 aliases=[],
+                convert_tcb2tdb=True,
+                tcb2tdb_scale_factor=1,
                 description="T0 starting time of event",
             )
         )
@@ -1104,6 +1127,8 @@ class ChromBump(NoiseComponent):
                 name="CHROMBUMPSIGMA",
                 units="",
                 aliases=[],
+                convert_tcb2tdb=True,
+                tcb2tdb_scale_factor=1,
                 description="Sigma time of event",
             )
         )
@@ -1113,6 +1138,8 @@ class ChromBump(NoiseComponent):
                 name="CHROMBUMPIDX",
                 units="",
                 aliases=[],
+                convert_tcb2tdb=True,
+                tcb2tdb_scale_factor=1,
                 description="Chromatic index of the chromatic noise.",
             )
         )
@@ -1161,6 +1188,8 @@ class PLGWNoise(NoiseComponent):
                 units="",
                 aliases=[],
                 description="Amplitude of powerlaw " "red noise.",
+                convert_tcb2tdb=True,
+                tcb2tdb_scale_factor=1,
             )
         )
         self.add_param(
@@ -1169,6 +1198,8 @@ class PLGWNoise(NoiseComponent):
                 units="",
                 aliases=[],
                 description="Spectral index of " "powerlaw red noise.",
+                convert_tcb2tdb=True,
+                tcb2tdb_scale_factor=1,
             )
         )
 
@@ -1178,6 +1209,8 @@ class PLGWNoise(NoiseComponent):
                 units="",
                 aliases=[],
                 description="Amplitude of powerlaw " "red noise in tempo2 format",
+                convert_tcb2tdb=True,
+                tcb2tdb_scale_factor=1,
             )
         )
         self.add_param(
@@ -1186,6 +1219,8 @@ class PLGWNoise(NoiseComponent):
                 units="",
                 aliases=[],
                 description="Spectral index of powerlaw " "red noise in tempo2 format",
+                convert_tcb2tdb=True,
+                tcb2tdb_scale_factor=1,
             )
         )
         self.add_param(
@@ -1194,6 +1229,8 @@ class PLGWNoise(NoiseComponent):
                 units="",
                 aliases=[],
                 description="Number of red noise frequencies.",
+                convert_tcb2tdb=True,
+                tcb2tdb_scale_factor=1,
             )
         )
         self.add_param(
@@ -1248,8 +1285,8 @@ class PLGWNoise(NoiseComponent):
             else 2
         )
 
-        if self.TNGWFAMP.value is not None and self.TNGWFGAM.value is not None:
-            amp, gam = 10**self.TNGWFAMP.value, self.TNGWFGAM.value
+        if self.TNGWAMP.value is not None and self.TNGWGAM.value is not None:
+            amp, gam = 10**self.TNGWAMP.value, self.TNGWGAM.value
         elif self.GWAMP.value is not None and self.GWIDX is not None:
             fac = (86400.0 * 365.24 * 1e6) / (2.0 * np.pi * np.sqrt(3.0))
             amp, gam = self.GWAMP.value / fac, -1 * self.GWIDX.value
