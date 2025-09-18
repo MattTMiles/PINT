@@ -543,7 +543,7 @@ class TimingModel:
 
         if num_components_of_type((PLChromNoise, CMWaveX)) == 1:
             assert (
-                num_components_of_type(ChromaticCM) == 1
+                num_components_of_type(ChromaticCM) == 0
             ), "PLChromNoise / CMWaveX component cannot be used without the ChromaticCM component."
 
     # def __str__(self):

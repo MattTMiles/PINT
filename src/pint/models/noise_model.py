@@ -892,6 +892,16 @@ class PLChromNoise(CorrelatedNoiseComponent):
             )
         )
         self.add_param(
+            floatParameter(
+                name="TNCHROMIDX",
+                units="",
+                aliases=[],
+                description="Number of chromatic noise frequencies.",
+                convert_tcb2tdb=True,
+                tcb2tdb_scale_factor=1,
+            )
+        )
+        self.add_param(
             intParameter(
                 name="TNCHROMC",
                 units="",
@@ -899,14 +909,7 @@ class PLChromNoise(CorrelatedNoiseComponent):
                 description="Number of chromatic noise frequencies.",
             )
         )
-        self.add_param(
-            intParameter(
-                name="TNCHROMIDX",
-                units="",
-                aliases=[],
-                description="Number of chromatic noise frequencies.",
-            )
-        )
+
         self.add_param(
             intParameter(
                 name="TNCHROMFLOG",
